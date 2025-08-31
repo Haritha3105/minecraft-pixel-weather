@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PixelWeather — Sound + Biomes + Volume + Themes</title>
+<style>
+  :root{
+    --pixel-size:8px;
+    --accent: #ffdf5a;
+    --panel-bg-light: rgba(255,255,255,0.94);
+    --panel-border-light: #222;
+    --panel-bg-dark: rgba(6,10,20,0.75);
+    --panel-border-dark: #e6eef6;
+    --text-light: #081226;
+    --text-dark: #f6f8fb;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+    color:var(--text-light); background:#87CEEB; text-align:center; min-height:100vh;
+    transition:background 600ms cubic-bezier(.2,.8,.2,1), color .25s ease;
+  }
+  body.dark{ color:var(--text-dark) }
+
+  /* pixel tiled background class (data-URI used) */
+  .pixel-bg { image-rendering: pixelated; background-size: calc(var(--pixel-size) * 2) calc(var(--pixel-size) * 2); }
+
+  header{ display:flex; align-items:center; justify-content:center; gap:12px; padding:14px; font-weight:800; font-size:1.15rem }
+  .controls{ display:flex; gap:10px; justify-content:center; align-items:center; padding:10px; flex-wrap:wrap; z-index:60; position:relative }
+
+  input.city-input{
+    padding:10px 12px; width:260px; border-radius:8px; font-size:1rem;
+    border:3px solid var(--panel-border-light); background:var(--panel-bg-light); color:var(--text-light);
+  }
+  body.dark .city-input{ background:var(--panel-bg-dark); border-color:var(--panel-border-dark); color:var(--text-dark); }
+
+  button.btn{
+    border:0; padding:10px 12px; border-radius:8px; cursor:pointer; font-weight:800;
+    display:inline-flex; gap:8px; align-items:center; justify-content:center;
+  }
+  .btn-primary{ background:var(--accent); color:#111; border:3px solid #2b2b2b; }
+  .btn-contrast{ background:#2b2b2b; color:#fff; border:3px solid #111; }
+  body.dark .btn-primary { filter:brightness(.9) }
+
+  .wrap{ max-width:980px; margin:8px auto 48px; padding:0 16px; position:relative }
+
+  .hero{ width:420px; height:230px; margin:8px auto 10px; pointer-events:none; z-index:10 }
+  .hero svg{ width:100%; height:100%; image-rendering:pixelated; }
+
+  .current{ margin:12px auto; width:min(540px,94%); background:rgba(255,255,255,0.96); border-radius:12px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.12); position:relative; z-index:20; border:3px solid var(--panel-border-light); color:var(--text-light) }
+  body.dark .current { background:var(--panel-bg-dark); border:3px solid var(--panel-border-dark); color:var(--text-dark) }
+  .current h2{ margin:6px 0 4px; font-size:1.12rem; letter-spacing:.6px; text-transform:uppercase; }
+  .temp{ font-size:2.2rem; font-weight:900; margin:6px 0; }
+  .meta{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; font-weight:800; }
+
+  .controls-right { display:flex; gap:8px; align-items:center; }
+
+  .audio-controls{ display:flex; gap:8px; align-items:center; }
+  .volume-slider{ width:140px; height:10px; appearance:none; background:linear-gradient(90deg,#4caf50,#8bc34a); border-radius:6px; outline:none; }
+  .volume-slider::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:4px; background:#222; box-shadow:0 2px 0 rgba(0,0,0,0.3); cursor:pointer; border:2px solid #fff; }
+  .volume-slider::-moz-range-thumb{ width:18px; height:18px; border-radius:4px; background:#222; border:2px solid #fff; }
+
+  .forecast-title{ margin-top:12px; font-size:1.05rem; display:none }
+  .forecast{ margin-top:10px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; z-index:20 }
+  .card{ width:140px; background:rgba(255,255,255,0.94); border-radius:10px; padding:10px; box-shadow:0 8px 20px rgba(0,0,0,.12); transform:translateY(18px); opacity:0; animation:cardIn .6s ease forwards; border:3px solid var(--panel-border-light) }
+  body.dark .card{ background:var(--panel-bg-dark); border:3px solid var(--panel-border-dark); color:var(--text-dark) }
+  .day{ font-weight:900; margin-bottom:6px; }
+  .small-pixel{ width:72px; height:72px; display:block; margin:0 auto 6px; image-rendering:pixelated; }
+
+  footer{ margin:26px 0 16px; opacity:.9; font-size:.9rem }
+
+  /* pixel moods via simple data-URI tiles for high contrast backgrounds */
+  body.mood-Clear.pixel-bg { background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='%23ffd77a'/></svg>"); background-color:#ffd87a }
+  body.mood-Clouds.pixel-bg{ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='%23dfe6ef'/></svg>"); background-color:#c9d4e6 }
+  body.mood-Rain.pixel-bg{ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='%2386b7ff'/></svg>"); background-color:#6ea3d8}
+  body.mood-Snow.pixel-bg{ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='%23eaf6ff'/></svg>"); background-color:#dff4ff }
+  body.mood-Thunderstorm.pixel-bg{ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='%23232b37'/></svg>"); background-color:#272f38 }
+  body.mood-Mist.pixel-bg{ background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='%23d7dee8'/></svg>"); background-color:#dbe3ec }
+
+  /* animations */
+  @keyframes cardIn{ from{transform:translateY(18px);opacity:0} to{transform:translateY(0);opacity:1} }
+  @keyframes cloudDrift{ 0%{transform:translateX(-20px)}50%{transform:translateX(20px)}100%{transform:translateX(-20px)} }
+  @keyframes rainFall{ 0%{transform:translateY(-8px);opacity:0}10%{opacity:1}100%{transform:translateY(36px);opacity:0} }
+  @keyframes snowFall{ 0%{transform:translateY(-8px) rotate(-12deg);opacity:0}20%{opacity:1}100%{transform:translateY(40px) rotate(12deg);opacity:0} }
+  @keyframes lightning{ 0%{opacity:.04}10%{opacity:1}20%{opacity:.04}100%{opacity:.04} }
+  @keyframes sunPulse{ 0%{transform:scale(1)}50%{transform:scale(1.06)}100%{transform:scale(1)} }
+
+  /* keep interactive controls above */
+  .controls, button, input { position:relative; z-index:90 }
+  .hero, .hero * { pointer-events: none; } /* lets clicks pass */
+  .sr-only{ position:absolute; left:-9999px }
+</style>
+</head>
+<body class="pixel-bg">
+  <header>
+    <strong>PixelWeather — Immersive Edition</strong>
+  </header>
+
+  <div class="controls">
+    <input id="city" class="city-input" placeholder="Enter city (e.g., Chennai)" />
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button id="searchBtn" class="btn btn-primary">Search</button>
+      <button id="locBtn" class="btn btn-primary">📍 My Location</button>
+    </div>
+
+    <div style="width:12px"></div>
+
+    <div class="audio-controls">
+      <button id="soundBtn" class="btn btn-contrast">🔈 Sound Off</button>
+      <input id="volume" class="volume-slider" type="range" min="0" max="100" value="50" />
+      <div style="width:8px"></div>
+      <button id="themeBtn" class="btn btn-contrast">🌙</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div id="hero" class="hero" aria-hidden="true"></div>
+
+    <div id="character" style="width:80px; height:96px; margin:6px auto 0; pointer-events:none"></div>
+
+    <section id="current" class="current" aria-live="polite">
+      <h2>Type a city or use your location</h2>
+      <p class="muted">Live weather • sunrise/sunset • 5-day pixel forecast</p>
+    </section>
+
+    <h3 id="forecastTitle" class="forecast-title">5-Day Forecast</h3>
+    <section id="forecast" class="forecast" aria-live="polite"></section>
+
+    <footer>Powered by OpenWeather • Synth sounds (no downloads)</footer>
+  </div>
+
+<script>
+/* =========================
+   PixelWeather — All-in ONE
+   - WebAudio synthesized ambient tracks (rain / thunder / birds / wind / crickets)
+   - Separate audio nodes (crossfade via gain nodes)
+   - Volume slider controls masterGain
+   - Theme toggle fixed + saver
+   - High contrast UI tweaks
+   ========================= */
+
+/* -------------------------
+   Replace with your OpenWeather API key
+   ------------------------- */
+const API_KEY = "21c462f68eb2d0504b19ba2908544383";
+
+/* -------------------------
+   Utilities & refs
+   ------------------------- */
+const $ = s => document.querySelector(s);
+const hero = $('#hero'), current = $('#current'), forecastEl = $('#forecast'), forecastTitle = $('#forecastTitle');
+const searchBtn = $('#searchBtn'), locBtn = $('#locBtn'), soundBtn = $('#soundBtn'), themeBtn = $('#themeBtn');
+const volumeEl = $('#volume'), cityInput = $('#city'), characterWrap = $('#character');
+
+let audioCtx = null;
+let masterGain = null;
+let ambient = {
+  rain: null,
+  thunder: null,
+  birds: null,
+  wind: null,
+  crickets: null
+};
+let ambientIntervals = { thunder: null };
+let soundEnabled = localStorage.getItem('pw_sound') === '1';
+let savedTheme = localStorage.getItem('pw_theme') || 'light';
+let lastWeatherMain = null;
+
+/* -------------------------
+   Theme toggle (fixed & stored)
+   ------------------------- */
+function setTheme(mode){
+  const isDark = mode === 'dark';
+  document.body.classList.toggle('dark', isDark);
+  themeBtn.textContent = isDark ? '☀️' : '🌙';
+  localStorage.setItem('pw_theme', mode);
+}
+setTheme(savedTheme);
+themeBtn.addEventListener('click', ()=>{
+  const newMode = document.body.classList.contains('dark') ? 'light' : 'dark';
+  setTheme(newMode);
+});
+
+/* -------------------------
+   WebAudio setup + ambient generators
+   ------------------------- */
+function ensureAudio(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = Number(volumeEl.value) / 100;
+    masterGain.connect(audioCtx.destination);
+  }
+}
+
+/* helper to fade a gain node to value */
+function rampGain(node, to, time = 0.6){
+  const now = audioCtx.currentTime;
+  node.gain.cancelScheduledValues(now);
+  node.gain.setValueAtTime(node.gain.value, now);
+  node.gain.linearRampToValueAtTime(to, now + time);
+}
+
+/* Rain: filtered noise loop (gentle) */
+function createRain(){
+  ensureAudio();
+  // white noise buffer
+  const bufferSize = 2 * audioCtx.sampleRate;
+  const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  for(let i=0;i<bufferSize;i++) data[i] = (Math.random()*2 -1) * 0.6;
+  const src = audioCtx.createBufferSource();
+  src.buffer = noiseBuffer;
+  src.loop = true;
+  const band = audioCtx.createBiquadFilter();
+  band.type = 'bandpass';
+  band.frequency.value = 1200;
+  band.Q.value = 1.2;
+  const gain = audioCtx.createGain(); gain.gain.value = 0;
+  src.connect(band); band.connect(gain); gain.connect(masterGain);
+  return { src, gain, start: ()=>{ src.start(); }, stop: ()=>{ try{ src.stop(); } catch(e){} } };
+}
+
+/* Thunder: synth rumble + occasional blast */
+function createThunder(){
+  ensureAudio();
+  const gain = audioCtx.createGain(); gain.gain.value = 0; gain.connect(masterGain);
+  function trigger(){
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(); osc.type='triangle'; osc.frequency.setValueAtTime(60, now);
+    const oGain = audioCtx.createGain(); oGain.gain.setValueAtTime(0.0001, now);
+    osc.connect(oGain); oGain.connect(gain);
+    oGain.gain.exponentialRampToValueAtTime(0.6, now + 0.06);
+    oGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+    osc.start(now); osc.stop(now + 1.2);
+    // noise splash
+    const bufferSize = audioCtx.sampleRate * 0.5;
+    const nb = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const d = nb.getChannelData(0); for(let i=0;i<bufferSize;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/bufferSize, 2);
+    const s = audioCtx.createBufferSource(); s.buffer = nb;
+    const flt = audioCtx.createBiquadFilter(); flt.type='lowpass'; flt.frequency.value = 1200;
+    s.connect(flt); flt.connect(gain);
+    s.start(now);
+  }
+  return { gain, trigger };
+}
+
+/* Birds: short tonal chirps scheduled */
+function createBirds(){
+  ensureAudio();
+  const gain = audioCtx.createGain(); gain.gain.value = 0; gain.connect(masterGain);
+  let loop = null;
+  function start(){
+    loop = setInterval(()=>{
+      const now = audioCtx.currentTime;
+      const o = audioCtx.createOscillator(); o.type='sine'; o.frequency.value = 1000 + Math.random()*700;
+      const g = audioCtx.createGain(); g.gain.value = 0.0001;
+      o.connect(g); g.connect(gain);
+      g.gain.exponentialRampToValueAtTime(0.15, now + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+      o.start(now); o.stop(now + 0.3);
+    }, 2600 + Math.random()*2000);
+    return loop;
+  }
+  function stop(){ clearInterval(loop); loop = null; }
+  return { gain, start, stop };
+}
+
+/* Wind: gentle oscillator + filter */
+function createWind(){
+  ensureAudio();
+  const noiseLen = 2 * audioCtx.sampleRate;
+  const noiseBuf = audioCtx.createBuffer(1, noiseLen, audioCtx.sampleRate);
+  const d = noiseBuf.getChannelData(0); for(let i=0;i<noiseLen;i++) d[i] = (Math.random()*2 -1) * 0.4;
+  const src = audioCtx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const flt = audioCtx.createBiquadFilter(); flt.type='lowpass'; flt.frequency.value = 600;
+  const gain = audioCtx.createGain(); gain.gain.value = 0;
+  src.connect(flt); flt.connect(gain); gain.connect(masterGain);
+  return { src, gain, start: ()=>{ src.start(); }, stop: ()=>{ try{ src.stop(); } catch(e){} } };
+}
+
+/* Crickets: repeating tiny ticks */
+function createCrickets(){
+  ensureAudio();
+  const gain = audioCtx.createGain(); gain.gain.value = 0; gain.connect(masterGain);
+  let id = null;
+  function start(){
+    id = setInterval(()=>{
+      const now = audioCtx.currentTime;
+      const o = audioCtx.createOscillator(); o.type='square'; o.frequency.value = 1600 + Math.random()*400;
+      const g = audioCtx.createGain(); g.gain.value = 0.0001;
+      o.connect(g); g.connect(gain);
+      g.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      o.start(now); o.stop(now + 0.14);
+    }, 700 + Math.random()*1000);
+  }
+  function stop(){ clearInterval(id); id = null; }
+  return { gain, start, stop };
+}
+
+/* ---------- ambient control helpers ---------- */
+function stopAllAmbient(){
+  // stop / clear intervals
+  if(ambient.rain){ try{ ambient.rain.stop(); }catch(e){} ambient.rain = null; }
+  if(ambient.wind){ try{ ambient.wind.stop(); }catch(e){} ambient.wind = null; }
+  if(ambient.birds){ ambient.birds.stop(); ambient.birds = null; }
+  if(ambient.crickets){ ambient.crickets.stop(); ambient.crickets = null; }
+  if(ambient.thunder){
+    if(ambientIntervals.thunder) clearInterval(ambientIntervals.thunder);
+    ambient.thunder = null;
+  }
+}
+
+function playAmbientFor(currentData){
+  // fade out old, start new
+  if(!soundEnabled) return;
+  if(!currentData) return;
+  const main = currentData.weather?.[0]?.main || 'Clear';
+  // if same main, nothing to change
+  if(lastWeatherMain === main) return;
+  lastWeatherMain = main;
+
+  // stop existing
+  stopAllAmbient();
+
+  // create & fade in nodes appropriate to weather
+  if(['Rain','Drizzle','Thunderstorm'].includes(main)){
+    // rain node
+    ambient.rain = createRain();
+    ambient.rain.start();
+    rampGain(ambient.rain.gain, 0.12, 0.8);
+    // wind texture
+    ambient.wind = createWind(); ambient.wind.start(); rampGain(ambient.wind.gain, 0.04, 0.8);
+  }
+  if(main === 'Thunderstorm'){
+    ambient.thunder = createThunder();
+    // occasional thunder triggers:
+    ambientIntervals.thunder = setInterval(()=>{ ambient.thunder.trigger(); }, 6000 + Math.random()*8000);
+  }
+  if(main === 'Clear'){
+    ambient.birds = createBirds(); ambient.birds.start();
+    rampGain(ambient.birds.gain, 0.10, 0.8);
+    ambient.crickets = createCrickets(); ambient.crickets.start();
+    rampGain(ambient.crickets.gain, 0.0, 0.3); // silent during day
+  }
+  if(main === 'Snow'){
+    ambient.wind = createWind(); ambient.wind.start(); rampGain(ambient.wind.gain, 0.06, 0.8);
+    ambient.crickets = createCrickets(); ambient.crickets.start(); rampGain(ambient.crickets.gain, 0.02, 0.8);
+  }
+  if(main === 'Mist' || main === 'Clouds'){
+    ambient.wind = createWind(); ambient.wind.start(); rampGain(ambient.wind.gain, 0.03, 0.8);
+    ambient.birds = createBirds(); ambient.birds.start(); rampGain(ambient.birds.gain, 0.02, 0.8);
+  }
+}
+
+/* adjust master volume (0..1) */
+function setMasterVolume(v){
+  ensureAudio();
+  masterGain.gain.setValueAtTime(v, audioCtx.currentTime);
+}
+
+/* ---------- Pixel SVG icons (hero & small) ---------- */
+/* Re-using the blocky pixel hero creators (simpler than earlier, but works) */
+const PixelSVG = {
+  Clear: {
+    hero:() => `<svg viewBox="0 0 160 96" xmlns="http://www.w3.org/2000/svg" style="image-rendering:pixelated"><g transform="translate(80,48)"><rect x="-12" y="-12" width="24" height="24" fill="#FFD54F" stroke="#e6c94a" stroke-width="1"/><rect x="-28" y="-28" width="56" height="56" fill="none" stroke="#FFD770" stroke-width="2" opacity="0.08" style="transform-origin:0 0; animation:sunPulse 2200ms infinite ease-in-out;"/></g></svg>`,
+    small:() => `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="image-rendering:pixelated"><rect x="22" y="22" width="20" height="20" fill="#FFD54F"/></svg>`
+  },
+  Clouds: {
+    hero:() => `<svg viewBox="0 0 160 96" xmlns="http://www.w3.org/2000/svg"><g style="animation:cloudDrift 6000ms linear infinite"><rect x="18" y="42" width="44" height="24" rx="4" fill="#F6F8FA"/><rect x="46" y="34" width="60" height="30" rx="4" fill="#E8EEF6"/><rect x="98" y="46" width="36" height="22" rx="4" fill="#F0F4FA"/></g></svg>`,
+    small:() => `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="16" y="26" width="32" height="16" rx="3" fill="#EDF4FA"/></svg>`
+  },
+  Rain: {
+    hero:() => `<svg viewBox="0 0 160 96" xmlns="http://www.w3.org/2000/svg"><g transform="translate(20,18)"><rect x="10" y="8" width="84" height="32" rx="4" fill="#dff2ff"/></g>${[18,38,58,78,98,118,138].map((x,i)=>`<g style="animation:rainFall 900ms ${i*140}ms linear infinite"><rect x="${x}" y="68" width="6" height="18" fill="#3ea0ff" rx="2"></rect></g>`).join('')}</svg>`,
+    small:() => `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="12" width="52" height="22" rx="4" fill="#e6f6ff"/>${[18,32,46].map((x,i)=>`<rect x="${x}" y="36" width="3" height="12" fill="#4fb0ff" rx="1" style="animation:rainFall 900ms ${i*120}ms linear infinite"/>`).join('')}</svg>`
+  },
+  Drizzle: {
+    hero:() => `<svg viewBox="0 0 160 96" xmlns="http://www.w3.org/2000/svg"><rect x="24" y="20" width="100" height="30" rx="6" fill="#eef8ff"/>${[48,76,104,132].map((x,i)=>`<rect x="${x}" y="${68}" width="4" height="14" fill="#7fc8ff" rx="1" style="animation:rainFall 1100ms ${i*160}ms linear infinite"/>`).join('')}</svg>`,
+    small:() => `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="4" y="12" width="56" height="18" rx="4" fill="#eefaff"/>${[20,36].map((x,i)=>`<rect x="${x}" y="${36}" width="3" height="10" fill="#7fc8ff" rx="1" style="animation:rainFall 1100ms ${i*160}ms linear infinite"/>`).join('')}</svg>`
+  },
+  Snow: {
+    hero:() => `<svg viewBox="0 0 160 96" xmlns="http://www.w3.org/2000/svg"><rect x="20" y="14" width="96" height="32" rx="6" fill="#f4fbff"/>${[34,60,86,112,138].map((x,i)=>`<g style="animation:snowFall 1400ms ${i*160}ms linear infinite"><rect x="${x}" y="${76}" width="6" height="6" fill="#fff" /></g>`).join('')}</svg>`,
+    small:() => `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="10" width="52" height="16" rx="4" fill="#f6fdff"/>${[20,36,50].map((x,i)=>`<rect x="${x}" y="${40}" width="4" height="4" fill="#fff" style="animation:snowFall 1400ms ${i*140}ms linear infinite"/>`).join('')}</svg>`
+  },
+  Thunderstorm: {
+    hero:() => `<svg viewBox="0 0 160 96" xmlns="http://www.w3.org/2000/svg"><rect x="18" y="14" width="84" height="32" rx="6" fill="#dfe6ec"/><g style="animation:lightning 1600ms infinite"><rect x="98" y="56" width="12" height="18" fill="#ffdd57" transform="skewX(-20)"/></g></svg>`,
+    small:() => `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="10" width="48" height="18" rx="4" fill="#dfe6ec"/><rect x="36" y="34" width="6" height="12" fill="#ffd24a" transform="skewX(-15)"/></svg>`
+  },
+  Mist: {
+    hero:() => `<svg viewBox="0 0 160 96" xmlns="http://www.w3.org/2000/svg">${[30,50,70,90].map((y,i)=>`<rect x="8" y="${y}" width="144" height="6" fill="#e6eef5" opacity="${0.12 + i*0.06}" style="animation:cloudDrift ${4000 + i*300}ms linear ${i*100}ms infinite alternate"/>`).join('')}</svg>`,
+    small:() => `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">${[16,26,36].map((y,i)=>`<rect x="6" y="${y}" width="52" height="4" fill="#e6eef5" opacity="${0.15 + i*0.06}" style="animation:cloudDrift ${2600 + i*200}ms linear ${i*100}ms infinite alternate"/>`).join('')}</svg>`
+  }
+};
+
+/* ---------- simple mapping ---------- */
+function mapMainToKey(main){
+  if(!main) return 'Clear';
+  if(main === 'Clouds') return 'Clouds';
+  if(main === 'Drizzle') return 'Drizzle';
+  if(main === 'Rain') return 'Rain';
+  if(main === 'Snow') return 'Snow';
+  if(main === 'Thunderstorm') return 'Thunderstorm';
+  if(['Mist','Fog','Haze','Smoke','Dust','Sand'].includes(main)) return 'Mist';
+  return 'Clear';
+}
+
+/* ---------- render helpers ---------- */
+function renderHero(main){
+  const k = mapMainToKey(main);
+  document.body.classList.remove('mood-Clear','mood-Clouds','mood-Rain','mood-Snow','mood-Thunderstorm','mood-Mist');
+  document.body.classList.add('mood-'+k);
+  document.body.classList.add('pixel-bg');
+  hero.innerHTML = (PixelSVG[k] && PixelSVG[k].hero) ? PixelSVG[k].hero() : PixelSVG.Clear.hero();
+}
+function smallSVGNode(main){
+  const k = mapMainToKey(main);
+  const wrap = document.createElement('div');
+  wrap.innerHTML = (PixelSVG[k] && PixelSVG[k].small) ? PixelSVG[k].small() : PixelSVG.Clear.small();
+  const el = wrap.firstElementChild;
+  el.classList.add('small-pixel');
+  return el;
+}
+
+/* ---------- character renderer ---------- */
+function renderCharacter(main){
+  const k = mapMainToKey(main);
+  const base = `<svg viewBox="0 0 64 80" xmlns="http://www.w3.org/2000/svg" style="image-rendering:pixelated"><rect width="64" height="80" fill="none"/>`;
+  let outfit = '';
+  if(k === 'Rain' || k === 'Drizzle'){
+    outfit = `<rect x="12" y="36" width="40" height="26" fill="#1f7fbf" /><rect x="22" y="24" width="20" height="12" fill="#0b5f9e" /><rect x="26" y="8" width="12" height="8" fill="#0b5f9e" /><rect x="20" y="64" width="24" height="6" fill="#052f4f" />`;
+  } else if(k === 'Snow'){
+    outfit = `<rect x="12" y="36" width="40" height="26" fill="#89c4ff" /><rect x="18" y="24" width="28" height="12" fill="#5fa0ff" /><rect x="20" y="64" width="24" height="6" fill="#2d4f6f" />`;
+  } else if(k === 'Thunderstorm'){
+    outfit = `<rect x="12" y="36" width="40" height="26" fill="#4a4a4a" /><rect x="18" y="24" width="28" height="12" fill="#2d2d2d" /><rect x="20" y="64" width="24" height="6" fill="#111" />`;
+  } else if(k === 'Clear'){
+    outfit = `<rect x="12" y="36" width="40" height="26" fill="#ffd54f" /><rect x="18" y="24" width="28" height="12" fill="#ffb84d" /><rect x="20" y="64" width="24" height="6" fill="#b36b00" />`;
+  } else {
+    outfit = `<rect x="12" y="36" width="40" height="26" fill="#dfe6ee" /><rect x="18" y="24" width="28" height="12" fill="#c8d6e0" /><rect x="20" y="64" width="24" height="6" fill="#99a6b0" />`;
+  }
+  const face = `<rect x="22" y="10" width="20" height="20" rx="2" fill="#ffd9b3"/><rect x="26" y="18" width="4" height="4" fill="#000"/><rect x="34" y="18" width="4" height="4" fill="#000"/>`;
+  characterWrap.innerHTML = base + face + outfit + `</svg>`;
+}
+
+/* ---------- time formatting ---------- */
+function formatTimeFromUTC(unix, tz){ const ms=(unix + (tz||0))*1000; const d=new Date(ms); const hh=d.getUTCHours().toString().padStart(2,'0'); const mm=d.getUTCMinutes().toString().padStart(2,'0'); return `${hh}:${mm}`; }
+
+/* ---------- render current + forecast ---------- */
+function renderCurrent(data){
+  const main = data.weather?.[0]?.main || 'Clear';
+  const desc = data.weather?.[0]?.description || '';
+  renderHero(main);
+  renderCharacter(main);
+  const tz = data.timezone || 0;
+  const sunrise = formatTimeFromUTC(data.sys.sunrise, tz);
+  const sunset = formatTimeFromUTC(data.sys.sunset, tz);
+  current.innerHTML = `<h2>${data.name}, ${data.sys.country}</h2><div class="temp">${Math.round(data.main.temp)}°C</div><div style="text-transform:capitalize;font-weight:800">${desc}</div><div class="meta"><div>💧 ${data.main.humidity}%</div><div>🌬️ ${data.wind.speed} m/s</div><div>🌅 ${sunrise}</div><div>🌇 ${sunset}</div></div>`;
+}
+
+function renderForecast(forecast){
+  const daily = forecast.list.filter(it => it.dt_txt.includes('12:00:00')).slice(0,5);
+  forecastEl.innerHTML = '';
+  daily.forEach((d,i)=>{
+    const day = new Date(d.dt_txt).toLocaleDateString(undefined,{weekday:'short'});
+    const desc = d.weather[0].description; const main = d.weather[0].main; const temp = Math.round(d.main.temp);
+    const card = document.createElement('div'); card.className='card'; card.style.animationDelay = `${i*120}ms`;
+    card.innerHTML = `<div class="day">${day}</div>`;
+    const svg = smallSVGNode(main);
+    card.appendChild(svg);
+    card.innerHTML += `<div style="text-transform:capitalize">${desc}</div><div style="font-weight:900;margin-top:6px">${temp}°C</div>`;
+    forecastEl.appendChild(card);
+  });
+  forecastTitle.style.display = daily.length ? 'block' : 'none';
+}
+
+/* ---------- fetchers ---------- */
+async function fetchCurrentByCity(city){
+  const url=`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`;
+  const r = await fetch(url); if(!r.ok) throw new Error('City not found'); return r.json();
+}
+async function fetchForecastByCity(city){
+  const url=`https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`;
+  const r = await fetch(url); if(!r.ok) throw new Error('Forecast not available'); return r.json();
+}
+async function fetchCurrentByCoords(lat,lon){
+  const url=`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
+  const r = await fetch(url); if(!r.ok) throw new Error('Location not found'); return r.json();
+}
+async function fetchForecastByCoords(lat,lon){
+  const url=`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
+  const r = await fetch(url); if(!r.ok) throw new Error('Forecast not available'); return r.json();
+}
+
+/* ---------- loaders ---------- */
+async function loadByCity(city){
+  try{
+    current.innerHTML = `<p>Loading weather for <b>${city}</b>…</p>`;
+    forecastEl.innerHTML = '';
+    const [cur, fore] = await Promise.all([fetchCurrentByCity(city), fetchForecastByCity(city)]);
+    renderCurrent(cur); renderForecast(fore);
+    playAmbientFor(cur);
+  }catch(err){
+    current.innerHTML = `<p>❌ ${err.message}</p>`; forecastEl.innerHTML=''; forecastTitle.style.display='none';
+    stopAllAmbient();
+  }
+}
+async function loadByCoords(lat,lon){
+  try{
+    current.innerHTML = `<p>Fetching weather for your location…</p>`; forecastEl.innerHTML = '';
+    const [cur, fore] = await Promise.all([fetchCurrentByCoords(lat,lon), fetchForecastByCoords(lat,lon)]);
+    renderCurrent(cur); renderForecast(fore);
+    playAmbientFor(cur);
+  }catch(err){
+    current.innerHTML = `<p>❌ ${err.message}</p>`; forecastEl.innerHTML=''; forecastTitle.style.display='none';
+    stopAllAmbient();
+  }
+}
+
+/* ---------- UI wiring ---------- */
+searchBtn.addEventListener('click', ()=>{ const v = cityInput.value.trim(); if(!v) return; loadByCity(v); });
+cityInput.addEventListener('keydown', e => { if(e.key === 'Enter') searchBtn.click(); });
+locBtn.addEventListener('click', ()=>{
+  if(!navigator.geolocation){ current.innerHTML = `<p>❌ Geolocation not supported.</p>`; return; }
+  navigator.geolocation.getCurrentPosition(pos => loadByCoords(pos.coords.latitude,pos.coords.longitude),
+    err => current.innerHTML = `<p>❌ Location error: ${err.message}</p>`,
+    {enableHighAccuracy:true, timeout:10000, maximumAge:60000});
+});
+
+/* ---------- sound toggle + volume ---------- */
+function setSoundOn(on){
+  soundEnabled = !!on;
+  localStorage.setItem('pw_sound', soundEnabled ? '1' : '0');
+  soundBtn.textContent = soundEnabled ? '🔊 Sound On' : '🔈 Sound Off';
+  if(soundEnabled){
+    // resume audio context on user gesture
+    ensureAudio();
+    if(audioCtx.state === 'suspended' && typeof audioCtx.resume === 'function') audioCtx.resume();
+    // re-play ambient for current weather if present
+    // attempt to pick current shown city (but we rely on lastWeatherMain)
+  } else {
+    stopAllAmbient();
+  }
+}
+setSoundOn(soundEnabled);
+soundBtn.addEventListener('click', ()=> setSoundOn(!soundEnabled));
+
+/* volume slider */
+volumeEl.addEventListener('input', (e)=>{
+  const v = Number(e.target.value) / 100;
+  setMasterVolume(v);
+});
+
+/* set initial master gain */
+ensureAudio();
+setMasterVolume(Number(volumeEl.value)/100);
+
+/* ---------- ambient play / stop wrappers exposed earlier ---------- */
+/* stopAllAmbient and playAmbientFor already defined above */
+
+/* ---------- small API key reminder ---------- */
+if(API_KEY === "YOUR_API_KEY"){
+  current.innerHTML = `<p style="color:rgba(0,0,0,.9)">⚠️ Replace <code>YOUR_API_KEY</code> with your OpenWeather API key in the script.</p>`;
+}
+
+/* ---------- optional: try geolocation on first visit (commented out) ---------- */
+/*
+navigator.geolocation && navigator.geolocation.getCurrentPosition(pos=>{
+  loadByCoords(pos.coords.latitude,pos.coords.longitude);
+}, ()=>{});
+*/
+
+</script>
+</body>
+</html>
